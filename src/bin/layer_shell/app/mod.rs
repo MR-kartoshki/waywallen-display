@@ -22,6 +22,7 @@ use wayland_client::protocol::wl_pointer::WlPointer;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Proxy, QueueHandle};
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::wp::linux_dmabuf::zv1::client::zwp_linux_dmabuf_feedback_v1::ZwpLinuxDmabufFeedbackV1;
@@ -150,6 +151,7 @@ struct OutputEntry {
 
 struct App {
     compositor: Option<WlCompositor>,
+    cursor_shape_manager: Option<(u32, WpCursorShapeManagerV1)>,
     layer_shell: Option<ZwlrLayerShellV1>,
     dmabuf: Option<ZwpLinuxDmabufV1>,
     viewporter: Option<WpViewporter>,
@@ -185,6 +187,7 @@ impl App {
     ) -> Self {
         Self {
             compositor: None,
+            cursor_shape_manager: None,
             layer_shell: None,
             dmabuf: None,
             viewporter: None,
@@ -530,6 +533,14 @@ pub(super) fn run(socket: PathBuf, name_prefix: String) -> Result<()> {
 
     for g in globals.contents().clone_list() {
         match g.interface.as_str() {
+            "wp_cursor_shape_manager_v1" => {
+                app.cursor_shape_manager = Some((
+                    g.name,
+                    globals
+                        .registry()
+                        .bind::<WpCursorShapeManagerV1, _, _>(g.name, 1, &qh, ()),
+                ));
+            }
             "wl_compositor" => {
                 app.compositor = Some(globals.registry().bind::<WlCompositor, _, _>(
                     g.name,
