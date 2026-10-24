@@ -3,8 +3,13 @@ use std::sync::atomic::Ordering;
 use wayland_client::protocol::wl_pointer::{ButtonState, WlPointer};
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::{wl_pointer, wl_seat};
-use wayland_client::{Connection, Dispatch, Proxy, QueueHandle};
+use wayland_client::{delegate_noop, Connection, Dispatch, Proxy, QueueHandle};
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_device_v1::{
+    Shape, WpCursorShapeDeviceV1,
+};
 use waywallen_display as sys;
+
+delegate_noop!(App: ignore WpCursorShapeDeviceV1);
 
 impl Dispatch<WlSeat, u32> for App {
     fn event(
@@ -51,15 +56,16 @@ impl Dispatch<WlSeat, u32> for App {
 impl Dispatch<WlPointer, u32> for App {
     fn event(
         state: &mut Self,
-        _p: &WlPointer,
+        pointer: &WlPointer,
         event: wl_pointer::Event,
         data: &u32,
         _conn: &Connection,
-        _qh: &QueueHandle<Self>,
+        qh: &QueueHandle<Self>,
     ) {
         let seat_name = *data;
         match event {
             wl_pointer::Event::Enter {
+                serial,
                 surface,
                 surface_x,
                 surface_y,
@@ -69,6 +75,12 @@ impl Dispatch<WlPointer, u32> for App {
                     Some(n) => *n,
                     None => return,
                 };
+                if let Some((_, manager)) = state.cursor_shape_manager.as_ref() {
+                    let device = manager.get_pointer(pointer, qh, ());
+                    device.set_shape(serial, Shape::Default);
+                    // Destroying the device leaves its selected cursor shape in place.
+                    device.destroy();
+                }
                 if let Some(ctx) = state.pointers.get_mut(&seat_name) {
                     ctx.focus_output = Some(output_name);
                     ctx.last_x = surface_x;

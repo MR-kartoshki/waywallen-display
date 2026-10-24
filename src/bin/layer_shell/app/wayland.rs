@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use wayland_client::delegate_noop;
 use wayland_client::globals::GlobalListContents;
 use wayland_client::protocol::wl_compositor::WlCompositor;
 use wayland_client::protocol::wl_output;
@@ -16,6 +17,7 @@ use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::protocol::wl_seat::WlSeat;
 use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::{Connection, Dispatch, QueueHandle};
+use wayland_protocols::wp::cursor_shape::v1::client::wp_cursor_shape_manager_v1::WpCursorShapeManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_manager_v1::WpFractionalScaleManagerV1;
 use wayland_protocols::wp::fractional_scale::v1::client::wp_fractional_scale_v1::WpFractionalScaleV1;
 use wayland_protocols::wp::fractional_scale::v1::client::{
@@ -33,6 +35,8 @@ use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_shell_v1::ZwlrLay
 use wayland_protocols_wlr::layer_shell::v1::client::zwlr_layer_surface_v1::ZwlrLayerSurfaceV1;
 use wayland_protocols_wlr::layer_shell::v1::client::{zwlr_layer_shell_v1, zwlr_layer_surface_v1};
 use waywallen_display as sys;
+
+delegate_noop!(App: ignore WpCursorShapeManagerV1);
 
 impl Dispatch<WlRegistry, GlobalListContents> for App {
     fn event(
@@ -87,12 +91,24 @@ impl Dispatch<WlRegistry, GlobalListContents> for App {
                             );
                         }
                     }
+                } else if interface == "wp_cursor_shape_manager_v1"
+                    && state.cursor_shape_manager.is_none()
+                {
+                    state.cursor_shape_manager = Some((
+                        name,
+                        registry.bind::<WpCursorShapeManagerV1, _, _>(name, 1, qh, ()),
+                    ));
                 } else if interface == "wl_seat" {
                     registry.bind::<WlSeat, _, _>(name, version.min(5), qh, name);
                     log::info!("hot-plug: wl_seat name={name} added");
                 }
             }
             Event::GlobalRemove { name } => {
+                if state.cursor_shape_manager.as_ref().map(|(id, _)| *id) == Some(name) {
+                    if let Some((_, manager)) = state.cursor_shape_manager.take() {
+                        manager.destroy();
+                    }
+                }
                 if let Some(ctx) = state.pointers.remove(&name) {
                     log::info!("hot-unplug: wl_seat name={name} removed");
                     ctx.pointer.release();
