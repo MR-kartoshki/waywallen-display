@@ -265,6 +265,7 @@ private slots:
     void onHandshakeIO();
     void onWindowReady();
     void onScreenChanged(QScreen* screen);
+    void reconnectForScreenIdentity();
     void onDaemonNameOwnerChanged(const QString& name, const QString& oldOwner,
                                   const QString& newOwner);
     void onDaemonReadySignal();
@@ -343,6 +344,7 @@ private:
     QString          m_socketPath;
     QString          m_displayName { QStringLiteral("qml-display") };
     QString          m_instanceId;
+    QString          m_connectedInstanceId;
     DisplayRole      m_displayRole = DesktopRole;
     int              m_displayWidth { 1920 };
     int              m_displayHeight { 1080 };
@@ -401,6 +403,7 @@ private:
     // Backoff fallback for reconnect (see scheduleReconnectBackoff).
     QTimer m_reconnectTimer;
     int    m_reconnectDelayMs { 2000 };
+    QTimer m_screenIdentityTimer;
 
     // Backend detected from Qt's scene graph.
     enum ActiveBackend

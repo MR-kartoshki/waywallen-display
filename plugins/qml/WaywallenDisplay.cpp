@@ -35,6 +35,7 @@ namespace
 {
 constexpr int kReconnectInitialDelayMs = 2000;
 constexpr int kReconnectMaxDelayMs     = 30000;
+constexpr int kScreenIdentityDelayMs   = 500;
 
 } // namespace
 
@@ -377,6 +378,13 @@ WaywallenDisplay::WaywallenDisplay(QQuickItem* parent): QQuickItem(parent) {
     m_reconnectTimer.setSingleShot(true);
     connect(&m_reconnectTimer, &QTimer::timeout, this, &WaywallenDisplay::onReconnectTimer);
 
+    m_screenIdentityTimer.setSingleShot(true);
+    m_screenIdentityTimer.setInterval(kScreenIdentityDelayMs);
+    connect(&m_screenIdentityTimer,
+            &QTimer::timeout,
+            this,
+            &WaywallenDisplay::reconnectForScreenIdentity);
+
     m_transitionTimer.setInterval(16);
     connect(&m_transitionTimer, &QTimer::timeout, this, &WaywallenDisplay::advanceTransition);
 }
@@ -415,6 +423,8 @@ std::shared_ptr<RenderSessionResources> WaywallenDisplay::takeRenderSessionResou
 }
 
 void WaywallenDisplay::cleanup() {
+    m_screenIdentityTimer.stop();
+    m_connectedInstanceId.clear();
     if (m_filterInstalled && window()) {
         window()->removeEventFilter(this);
     }
@@ -1396,6 +1406,14 @@ void WaywallenDisplay::onWindowReady() {
 }
 
 void WaywallenDisplay::onScreenChanged(QScreen* screen) {
+    if (m_instanceId.isEmpty()) emit instanceIdChanged();
+
+    if (displayHandle() && ! m_connectedInstanceId.isEmpty() &&
+        m_connectedInstanceId != effectiveInstanceId()) {
+        m_screenIdentityTimer.start();
+    } else {
+        m_screenIdentityTimer.stop();
+    }
     emit effectiveDevicePixelRatioChanged();
     // refresh on next event loop cycle as well, after qt updates dpr
     // Qt 6.11+ has a dedicated signal for older versions we use a singleShot.
@@ -1410,6 +1428,26 @@ void WaywallenDisplay::onScreenChanged(QScreen* screen) {
                 Qt::UniqueConnection);
     }
     if (displayHandle()) m_updateSizeTimer.start();
+}
+
+void WaywallenDisplay::reconnectForScreenIdentity() {
+    const QString currentInstanceId = effectiveInstanceId();
+
+    if (! displayHandle() || m_connectedInstanceId.isEmpty() || currentInstanceId.isEmpty() ||
+        m_connectedInstanceId == currentInstanceId)
+        return;
+
+    qCInfo(lcWD,
+           "screen identity changed: %s -> %s; reconnecting display",
+           qPrintable(m_connectedInstanceId),
+           qPrintable(currentInstanceId));
+
+    cleanup();
+    setConnState(Disconnected);
+    setStreamState(Inactive);
+    update();
+
+    QMetaObject::invokeMethod(this, &WaywallenDisplay::requestReconnect, Qt::QueuedConnection);
 }
 
 void WaywallenDisplay::tryConnect() {
@@ -1551,6 +1589,8 @@ void WaywallenDisplay::tryConnect() {
         scheduleReconnectBackoff();
         return;
     }
+
+    m_connectedInstanceId = QString::fromUtf8(instanceId);
 
     // begin_connect carries these dims to the daemon as part of
     // register_display, so seed the dedupe so a same-size resize
