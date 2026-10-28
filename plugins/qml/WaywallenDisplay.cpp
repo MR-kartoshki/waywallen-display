@@ -810,6 +810,8 @@ void WaywallenDisplay::pushSizeUpdate() {
         // already carried the latest dims via begin_connect.
         return;
     }
+    // A reassigned screen must not resize the old identity during debounce.
+    if (! m_connectedInstanceId.isEmpty() && m_connectedInstanceId != effectiveInstanceId()) return;
     if (m_displayWidth <= 0 || m_displayHeight <= 0) return;
     const uint32_t refreshMhz = screenRefreshMhz();
     if (m_lastPushedWidth == m_displayWidth && m_lastPushedHeight == m_displayHeight &&

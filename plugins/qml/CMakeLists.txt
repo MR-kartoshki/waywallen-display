@@ -70,6 +70,23 @@ target_compile_options(waywallen-display-qml PRIVATE
 target_link_options(waywallen-display-qml PRIVATE
     -Wl,--as-needed)
 
+if(WAYWALLEN_DISPLAY_BUILD_TESTS AND WAYWALLEN_DISPLAY_BUILD_QML_TESTS)
+    add_executable(test_qml_display_metrics ../../tests/test_qml_display_metrics.cpp)
+    target_compile_features(test_qml_display_metrics PRIVATE cxx_std_17)
+    target_compile_options(test_qml_display_metrics PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_definitions(test_qml_display_metrics PRIVATE
+        WW_TEST_QML_URI="${WAYWALLEN_DISPLAY_QML_URI}")
+    target_include_directories(test_qml_display_metrics PRIVATE
+        ../../src ${GENERATED_DIR})
+    target_link_libraries(test_qml_display_metrics PRIVATE
+        Qt6::Quick waywallen_display_static)
+    add_dependencies(test_qml_display_metrics waywallen-display-qml)
+    add_test(NAME test_qml_display_metrics
+        COMMAND test_qml_display_metrics ${CMAKE_CURRENT_BINARY_DIR})
+    set_tests_properties(test_qml_display_metrics PROPERTIES ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;DBUS_SESSION_BUS_ADDRESS=unix:path=/waywallen-test-unavailable")
+endif()
+
 # Install the plugin + qmldir into the Qt QML import tree.
 set(QML_INSTALL_DIR "${CMAKE_INSTALL_FULL_LIBDIR}/qt6/qml"
     CACHE PATH "QML plugin install directory")
